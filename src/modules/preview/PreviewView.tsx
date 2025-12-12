@@ -1,10 +1,16 @@
 import { useNavigate } from 'react-router-dom';
 import { Button, Icon } from '../../components/ui';
 import { useAppSelector } from '../../store/hooks';
+import type { Component } from '../../types';
+
+const getComponentLabel = (component: Component) => {
+  const label = component.props.label;
+  return typeof label === 'string' && label.trim().length > 0 ? label : component.type;
+};
 
 export const PreviewView: React.FC = () => {
   const navigate = useNavigate();
-  const components = useAppSelector((state) => state.builder.components);
+  const components = useAppSelector((state) => state.builder.schema.present);
 
   return (
     <div className="min-h-screen bg-white">
@@ -17,25 +23,66 @@ export const PreviewView: React.FC = () => {
       </header>
 
       <main className="p-8">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-2xl mx-auto">
           {components.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-secondary-500">
               <Icon type="preview" size="lg" className="mb-4" />
-              <p className="text-lg">No components to preview</p>
-              <p className="text-sm mt-2">Add components in the builder to see them here</p>
+              <p className="text-lg">No fields to preview</p>
+              <p className="text-sm mt-2">Add fields in the builder to see them here</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {components.map((component) => (
-                <div
-                  key={component.id}
-                  className="p-6 border border-builder-border rounded-lg bg-white"
-                >
-                  <h3 className="text-lg font-medium text-secondary-900">{component.type}</h3>
-                  <p className="text-sm text-secondary-600 mt-1">Component ID: {component.id}</p>
-                </div>
-              ))}
-            </div>
+            <form className="space-y-5" aria-label="Preview form">
+              {components.map((component) => {
+                const label = getComponentLabel(component);
+                const name = typeof component.props.name === 'string' ? component.props.name : '';
+                const placeholder =
+                  typeof component.props.placeholder === 'string'
+                    ? component.props.placeholder
+                    : '';
+                const required = Boolean(component.props.required);
+
+                return (
+                  <div key={component.id} className="space-y-1">
+                    <label className="block text-sm font-medium text-secondary-900" htmlFor={name}>
+                      {label}
+                      {required && <span className="text-red-600"> *</span>}
+                    </label>
+
+                    {component.type === 'textarea' ? (
+                      <textarea
+                        id={name}
+                        name={name}
+                        placeholder={placeholder}
+                        required={required}
+                        className="w-full rounded border border-builder-border px-3 py-2"
+                      />
+                    ) : component.type === 'checkbox' ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          id={name}
+                          name={name}
+                          type="checkbox"
+                          required={required}
+                          className="rounded border-builder-border"
+                        />
+                        <span className="text-sm text-secondary-700">{label}</span>
+                      </div>
+                    ) : (
+                      <input
+                        id={name}
+                        name={name}
+                        type="text"
+                        placeholder={placeholder}
+                        required={required}
+                        className="w-full rounded border border-builder-border px-3 py-2"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+
+              <Button type="submit">Submit</Button>
+            </form>
           )}
         </div>
       </main>

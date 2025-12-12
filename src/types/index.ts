@@ -6,8 +6,19 @@ export interface Component {
   order: number;
 }
 
-export interface BuilderState {
+export interface UndoRedoState<T> {
+  past: T[];
+  present: T;
+  future: T[];
+}
+
+export interface BuilderSchemaV1 {
+  version: 1;
   components: Component[];
+}
+
+export interface BuilderState {
+  schema: UndoRedoState<Component[]>;
   selectedComponentId: string | null;
   isDragging: boolean;
 }
