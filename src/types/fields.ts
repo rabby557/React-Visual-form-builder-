@@ -97,6 +97,14 @@ export type FieldConfig =
   | RichTextFieldConfig
   | SliderFieldConfig;
 
+export interface FieldRenderProps {
+  config: FieldConfig;
+  mode: 'builder' | 'preview';
+  value?: unknown;
+  onChange?: (value: unknown) => void;
+  error?: string | null;
+}
+
 export interface FieldDefinition {
   type: FieldType;
   title: string;
@@ -106,11 +114,9 @@ export interface FieldDefinition {
   configComponent?: React.ComponentType<{
     config: FieldConfig;
     onChange: (updates: Partial<FieldConfig>) => void;
+    error?: string | null;
   }>;
-  renderComponent: React.ComponentType<{
-    config: FieldConfig;
-    mode: 'builder' | 'preview';
-  }>;
+  renderComponent: React.ComponentType<FieldRenderProps>;
   validateConfig?: (config: Partial<FieldConfig>) => string | null;
 }
 

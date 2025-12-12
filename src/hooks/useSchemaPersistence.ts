@@ -6,16 +6,16 @@ import {
   loadSchemaFromStorage,
   parseSchemaJson,
   saveSchemaToStorage,
-  serializeSchemaV1,
+  serializeSchemaV2,
 } from '../utils/schemaStorage';
 
 export const useSchemaPersistence = () => {
   const dispatch = useAppDispatch();
-  const components = useAppSelector((state) => state.builder.schema.present);
+  const schema = useAppSelector((state) => state.builder.schema.present);
 
   const save = useCallback(() => {
-    saveSchemaToStorage(components);
-  }, [components]);
+    saveSchemaToStorage(schema);
+  }, [schema]);
 
   const load = useCallback(() => {
     const loaded = loadSchemaFromStorage();
@@ -30,8 +30,8 @@ export const useSchemaPersistence = () => {
   }, [dispatch]);
 
   const exportJson = useCallback(() => {
-    return JSON.stringify(serializeSchemaV1(components), null, 2);
-  }, [components]);
+    return JSON.stringify(serializeSchemaV2(schema), null, 2);
+  }, [schema]);
 
   const importJson = useCallback(
     (json: string) => {

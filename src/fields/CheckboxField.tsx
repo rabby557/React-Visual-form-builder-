@@ -1,19 +1,24 @@
-import type { CheckboxFieldConfig, FieldConfig, FieldDefinition } from '../types/fields';
+import type { CheckboxFieldConfig, FieldConfig, FieldDefinition, FieldRenderProps } from '../types/fields';
+import { FieldConfigPanel } from './config/FieldConfigPanel';
 
-const CheckboxFieldRender: React.FC<{
-  config: FieldConfig;
-  mode: 'builder' | 'preview';
-}> = ({ config: rawConfig, mode }) => {
+const CheckboxFieldRender: React.FC<FieldRenderProps> = ({
+  config: rawConfig,
+  mode,
+  value,
+  onChange,
+  error,
+}) => {
   const config = rawConfig as CheckboxFieldConfig;
+
+  const isControlled = typeof onChange === 'function';
+  const checkedValue =
+    typeof value === 'boolean' ? value : Boolean(value ?? (config.defaultValue as boolean | undefined));
+
   if (mode === 'builder') {
     return (
       <div className="space-y-1">
         <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            disabled
-            className={`border-builder-border ${config.className || ''}`}
-          />
+          <input type="checkbox" disabled className={`border-builder-border ${config.className || ''}`} />
           <label className="text-sm font-medium text-secondary-700">{config.label}</label>
         </div>
         {config.helperText && <p className="text-xs text-secondary-600">{config.helperText}</p>}
@@ -30,8 +35,10 @@ const CheckboxFieldRender: React.FC<{
           type="checkbox"
           required={config.required}
           disabled={config.disabled}
-          defaultChecked={Boolean(config.defaultValue)}
-          value={'value' in config ? (config.value as string | number | undefined) : undefined}
+          value={'value' in config ? (config.value as string | number | boolean | undefined) : undefined}
+          {...(isControlled
+            ? { checked: checkedValue, onChange: (e) => onChange(e.target.checked) }
+            : { defaultChecked: Boolean(config.defaultValue) })}
           className={`border-builder-border ${config.className || ''}`}
         />
         <label htmlFor={config.name} className="text-sm font-medium text-secondary-900">
@@ -40,6 +47,7 @@ const CheckboxFieldRender: React.FC<{
         </label>
       </div>
       {config.helperText && <p className="text-xs text-secondary-600">{config.helperText}</p>}
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 };
@@ -59,6 +67,9 @@ export const checkboxFieldDefinition: FieldDefinition = {
     name: 'checkbox',
     required: false,
   },
+  configComponent: ({ config, onChange, error }) => (
+    <FieldConfigPanel config={config} onChange={onChange} error={error} />
+  ),
   renderComponent: CheckboxFieldRender,
   validateConfig: validateCheckboxConfig,
 };
