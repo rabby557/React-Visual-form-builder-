@@ -60,3 +60,11 @@ export interface IconProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
+
+export {
+  type FieldType,
+  type FieldConfig,
+  type FieldDefinition,
+  type FieldRegistry,
+  type ValidationRule,
+} from './fields';
