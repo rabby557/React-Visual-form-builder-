@@ -1,10 +1,19 @@
-import type { FileUploadFieldConfig, FieldConfig, FieldDefinition } from '../types/fields';
+import type {
+  FileUploadFieldConfig,
+  FieldConfig,
+  FieldDefinition,
+  FieldRenderProps,
+} from '../types/fields';
+import { FieldConfigPanel } from './config/FieldConfigPanel';
 
-const FileUploadFieldRender: React.FC<{
-  config: FieldConfig;
-  mode: 'builder' | 'preview';
-}> = ({ config: rawConfig, mode }) => {
+const FileUploadFieldRender: React.FC<FieldRenderProps> = ({
+  config: rawConfig,
+  mode,
+  onChange,
+  error,
+}) => {
   const config = rawConfig as FileUploadFieldConfig;
+
   if (mode === 'builder') {
     return (
       <div className="space-y-1">
@@ -34,8 +43,10 @@ const FileUploadFieldRender: React.FC<{
         disabled={config.disabled}
         accept={config.accept}
         multiple={config.multiple}
+        onChange={(e) => onChange?.(e.target.files)}
         className={`w-full px-3 py-2 border border-builder-border rounded text-sm ${config.className || ''}`}
       />
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 };
@@ -55,6 +66,9 @@ export const fileUploadFieldDefinition: FieldDefinition = {
     name: 'file_upload',
     required: false,
   },
+  configComponent: ({ config, onChange, error }) => (
+    <FieldConfigPanel config={config} onChange={onChange} error={error} />
+  ),
   renderComponent: FileUploadFieldRender,
   validateConfig: validateFileUploadConfig,
 };

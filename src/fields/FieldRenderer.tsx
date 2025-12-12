@@ -5,9 +5,19 @@ interface FieldRendererProps {
   type: FieldType;
   config: FieldConfig;
   mode: 'builder' | 'preview';
+  value?: unknown;
+  onChange?: (value: unknown) => void;
+  error?: string | null;
 }
 
-export const FieldRenderer: React.FC<FieldRendererProps> = ({ type, config, mode }) => {
+export const FieldRenderer: React.FC<FieldRendererProps> = ({
+  type,
+  config,
+  mode,
+  value,
+  onChange,
+  error,
+}) => {
   const registry = getFieldRegistry();
   const definition = registry.get(type);
 
@@ -20,5 +30,5 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({ type, config, mode
   }
 
   const RenderComponent = definition.renderComponent;
-  return <RenderComponent config={config} mode={mode} />;
+  return <RenderComponent config={config} mode={mode} value={value} onChange={onChange} error={error} />;
 };

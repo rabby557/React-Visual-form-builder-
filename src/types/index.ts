@@ -1,9 +1,12 @@
+import type { FormStep } from './form';
+
 export interface Component {
   id: string;
   type: string;
   props: Record<string, unknown>;
   children?: string[];
   order: number;
+  stepId?: string;
 }
 
 export interface UndoRedoState<T> {
@@ -17,9 +20,23 @@ export interface BuilderSchemaV1 {
   components: Component[];
 }
 
+export interface BuilderSchemaV2 {
+  version: 2;
+  steps: FormStep[];
+  components: Component[];
+}
+
+export type BuilderSchema = BuilderSchemaV1 | BuilderSchemaV2;
+
+export interface FormSchema {
+  steps: FormStep[];
+  components: Component[];
+}
+
 export interface BuilderState {
-  schema: UndoRedoState<Component[]>;
+  schema: UndoRedoState<FormSchema>;
   selectedComponentId: string | null;
+  selectedStepId: string | null;
   isDragging: boolean;
 }
 
@@ -60,6 +77,13 @@ export interface IconProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
+
+export {
+  type FormStep,
+  type LogicOperator,
+  type VisibilityCondition,
+  type VisibilityRule,
+} from './form';
 
 export {
   type FieldType,

@@ -1,10 +1,23 @@
-import type { DateFieldConfig, FieldConfig, FieldDefinition } from '../types/fields';
+import type { DateFieldConfig, FieldConfig, FieldDefinition, FieldRenderProps } from '../types/fields';
+import { FieldConfigPanel } from './config/FieldConfigPanel';
 
-const DateFieldRender: React.FC<{ config: FieldConfig; mode: 'builder' | 'preview' }> = ({
+const DateFieldRender: React.FC<FieldRenderProps> = ({
   config: rawConfig,
   mode,
+  value,
+  onChange,
+  error,
 }) => {
   const config = rawConfig as DateFieldConfig;
+
+  const isControlled = typeof onChange === 'function';
+  const currentValue =
+    typeof value === 'string'
+      ? value
+      : typeof config.defaultValue === 'string'
+        ? (config.defaultValue as string)
+        : '';
+
   if (mode === 'builder') {
     return (
       <div className="space-y-1">
@@ -32,12 +45,15 @@ const DateFieldRender: React.FC<{ config: FieldConfig; mode: 'builder' | 'previe
         type="date"
         required={config.required}
         disabled={config.disabled}
-        defaultValue={config.defaultValue as string}
         min={config.min}
         max={config.max}
         step={config.step}
+        {...(isControlled
+          ? { value: currentValue, onChange: (e) => onChange(e.target.value) }
+          : { defaultValue: config.defaultValue as string | undefined })}
         className={`w-full px-3 py-2 border border-builder-border rounded text-sm ${config.className || ''}`}
       />
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 };
@@ -57,6 +73,9 @@ export const dateFieldDefinition: FieldDefinition = {
     name: 'date',
     required: false,
   },
+  configComponent: ({ config, onChange, error }) => (
+    <FieldConfigPanel config={config} onChange={onChange} error={error} />
+  ),
   renderComponent: DateFieldRender,
   validateConfig: validateDateConfig,
 };

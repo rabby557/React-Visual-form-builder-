@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   closestCenter,
   DndContext,
@@ -13,51 +13,47 @@ import { CSS } from '@dnd-kit/utilities';
 import { useNavigate } from 'react-router-dom';
 import { Button, Icon, Modal, Panel } from '../../components/ui';
 import { useDragAndDrop, useSchemaPersistence } from '../../hooks';
+import { FieldRenderer } from '../../fields/FieldRenderer';
+import { getFieldRegistry } from '../../fields/registry';
+import { FieldConfigPanel } from '../../fields/config/FieldConfigPanel';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import {
   addComponent,
+  addStep,
   redo,
   removeComponent,
+  removeStep,
   reorderComponents,
   selectComponent,
+  selectStep,
   setDragging,
   undo,
   updateComponent,
+  updateStep,
 } from '../../store/builderSlice';
-import type { Component } from '../../types';
+import type {
+  Component,
+  FieldConfig,
+  FieldType,
+  FormStep,
+  LogicOperator,
+  ValidationRule,
+  VisibilityCondition,
+  VisibilityRule,
+} from '../../types';
 import { generateId } from '../../utils/helpers';
 
 type FieldTemplate = {
-  type: string;
+  id: string;
+  type: FieldType;
   title: string;
   description: string;
-  defaultProps: Record<string, unknown>;
+  defaultConfig: Partial<FieldConfig>;
 };
 
 type ActiveDragData =
-  | { kind: 'template'; templateType: string }
+  | { kind: 'template'; templateId: string }
   | { kind: 'component'; componentId: string };
-
-const FIELD_TEMPLATES: FieldTemplate[] = [
-  {
-    type: 'text',
-    title: 'Text Input',
-    description: 'Single-line text',
-    defaultProps: { label: 'Text', name: 'text', placeholder: '', required: false },
-  },
-  {
-    type: 'textarea',
-    title: 'Textarea',
-    description: 'Multi-line text',
-    defaultProps: { label: 'Textarea', name: 'textarea', placeholder: '', required: false },
-  },
-  {
-    type: 'checkbox',
-    title: 'Checkbox',
-    description: 'True/false',
-    defaultProps: { label: 'Checkbox', name: 'checkbox', required: false },
-  },
-];
 
 const isEditableTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) return false;
@@ -66,14 +62,74 @@ const isEditableTarget = (target: EventTarget | null) => {
 };
 
 const getComponentLabel = (component: Component) => {
-  const label = component.props.label;
+  const label = (component.props as FieldConfig).label;
   return typeof label === 'string' && label.trim().length > 0 ? label : component.type;
+};
+
+const StepsPanel: React.FC<{
+  steps: FormStep[];
+  selectedStepId: string | null;
+  onSelectStep: (id: string) => void;
+  onAddStep: () => void;
+  onRenameStep: (id: string, title: string) => void;
+  onDeleteStep: (id: string) => void;
+}> = ({ steps, selectedStepId, onSelectStep, onAddStep, onRenameStep, onDeleteStep }) => {
+  return (
+    <Panel title="Steps">
+      <div className="space-y-2">
+        {steps.map((step) => {
+          const isSelected = selectedStepId === step.id;
+          return (
+            <div
+              key={step.id}
+              className={`rounded border p-2 ${
+                isSelected ? 'border-primary-400 bg-primary-50' : 'border-builder-border bg-white'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {isSelected ? (
+                  <input
+                    value={step.title}
+                    onChange={(e) => onRenameStep(step.id, e.target.value)}
+                    className="flex-1 px-2 py-1 border border-builder-border rounded bg-white text-sm"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onSelectStep(step.id)}
+                    className="flex-1 text-left text-sm font-medium text-secondary-900"
+                  >
+                    {step.title}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  className="p-1 rounded hover:bg-red-50 text-red-600 disabled:opacity-50"
+                  disabled={steps.length <= 1}
+                  aria-label={`Delete ${step.title}`}
+                  onClick={() => onDeleteStep(step.id)}
+                >
+                  <Icon type="delete" size="sm" />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        <Button variant="outline" size="sm" onClick={onAddStep} className="w-full justify-center">
+          <Icon type="add" size="sm" className="mr-2" />
+          Add step
+        </Button>
+      </div>
+    </Panel>
+  );
 };
 
 const TemplateDraggable: React.FC<{ template: FieldTemplate }> = ({ template }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `template:${template.type}`,
-    data: { kind: 'template', templateType: template.type } satisfies ActiveDragData,
+    id: `template:${template.id}`,
+    data: { kind: 'template', templateId: template.id } satisfies ActiveDragData,
   });
 
   const style: React.CSSProperties | undefined = transform
@@ -128,6 +184,8 @@ const SortableCanvasItem: React.FC<{
   };
 
   const label = getComponentLabel(component);
+  const type = component.type as FieldType;
+  const config = component.props as FieldConfig;
 
   return (
     <li ref={setNodeRef} style={style}>
@@ -150,10 +208,13 @@ const SortableCanvasItem: React.FC<{
             : 'border-builder-border hover:border-primary-300'
         }`}
       >
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
             <div className="font-medium text-secondary-900 truncate">{label}</div>
             <div className="text-xs text-secondary-600 mt-0.5">Type: {component.type}</div>
+            <div className="mt-3">
+              <FieldRenderer type={type} config={config} mode="builder" />
+            </div>
           </div>
 
           <div className="flex items-center gap-1">
@@ -207,14 +268,12 @@ const Canvas: React.FC<{
     <Panel title="Canvas" className="min-h-[24rem]">
       <div
         ref={setNodeRef}
-        className={`min-h-[18rem] rounded transition-colors ${
-          isOver ? 'bg-primary-50' : 'bg-transparent'
-        }`}
+        className={`min-h-[18rem] rounded transition-colors ${isOver ? 'bg-primary-50' : ''}`}
       >
         {components.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-secondary-500">
             <Icon type="builder" size="lg" className="mb-4" />
-            <p className="text-lg">Start building by adding fields</p>
+            <p className="text-lg">Add fields to this step</p>
             <p className="text-sm mt-2">Drag fields from the palette into the canvas</p>
           </div>
         ) : (
@@ -235,18 +294,267 @@ const Canvas: React.FC<{
   );
 };
 
+const ValidationRulesEditor: React.FC<{
+  rules: ValidationRule[];
+  onChange: (rules: ValidationRule[]) => void;
+}> = ({ rules, onChange }) => {
+  const updateRule = (index: number, updates: Partial<ValidationRule>) => {
+    const next = rules.map((rule, i) => (i === index ? { ...rule, ...updates } : rule));
+    onChange(next);
+  };
+
+  const removeRule = (index: number) => {
+    onChange(rules.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="space-y-3">
+      {rules.length === 0 ? (
+        <p className="text-sm text-secondary-500">No extra validation rules.</p>
+      ) : (
+        <div className="space-y-2">
+          {rules.map((rule, index) => {
+            const valueInputType = rule.type === 'pattern' ? 'text' : 'number';
+            const showValue = rule.type === 'min' || rule.type === 'max' || rule.type === 'pattern';
+
+            return (
+              <div key={index} className="rounded border border-builder-border bg-white p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <select
+                    value={rule.type}
+                    onChange={(e) => updateRule(index, { type: e.target.value as ValidationRule['type'] })}
+                    className="px-2 py-1 border border-builder-border rounded text-sm"
+                  >
+                    <option value="min">Min</option>
+                    <option value="max">Max</option>
+                    <option value="pattern">Pattern</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    className="p-1 rounded hover:bg-red-50 text-red-600"
+                    onClick={() => removeRule(index)}
+                    aria-label="Remove rule"
+                  >
+                    <Icon type="delete" size="sm" />
+                  </button>
+                </div>
+
+                {showValue && (
+                  <input
+                    type={valueInputType}
+                    value={rule.value === undefined ? '' : String(rule.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (rule.type === 'pattern') {
+                        updateRule(index, { value: v });
+                        return;
+                      }
+                      updateRule(index, { value: v ? Number(v) : undefined });
+                    }}
+                    className="w-full px-3 py-2 border border-builder-border rounded text-sm"
+                    placeholder={rule.type === 'pattern' ? 'Regex pattern' : 'Value'}
+                  />
+                )}
+
+                <input
+                  type="text"
+                  value={rule.message || ''}
+                  onChange={(e) => updateRule(index, { message: e.target.value })}
+                  className="w-full px-3 py-2 border border-builder-border rounded text-sm"
+                  placeholder="Custom error message (optional)"
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onChange([...rules, { type: 'min', value: 0 }])}
+        className="justify-center"
+      >
+        <Icon type="add" size="sm" className="mr-2" />
+        Add rule
+      </Button>
+    </div>
+  );
+};
+
+const OPERATOR_LABELS: Record<LogicOperator, string> = {
+  equals: 'Equals',
+  not_equals: 'Not equals',
+  contains: 'Contains',
+  gt: 'Greater than',
+  gte: 'Greater than or equal',
+  lt: 'Less than',
+  lte: 'Less than or equal',
+  is_empty: 'Is empty',
+  is_not_empty: 'Is not empty',
+  is_checked: 'Is checked',
+  is_unchecked: 'Is unchecked',
+};
+
+const VisibilityRuleEditor: React.FC<{
+  rule: VisibilityRule | undefined;
+  components: Component[];
+  currentComponentId: string;
+  onChange: (rule: VisibilityRule | undefined) => void;
+}> = ({ rule, components, currentComponentId, onChange }) => {
+  const safeRule: VisibilityRule =
+    rule ?? ({ action: 'show', match: 'all', conditions: [] } satisfies VisibilityRule);
+
+  const update = (updates: Partial<VisibilityRule>) => {
+    onChange({ ...safeRule, ...updates });
+  };
+
+  const updateCondition = (index: number, updates: Partial<VisibilityCondition>) => {
+    const nextConditions = safeRule.conditions.map((c, i) => (i === index ? { ...c, ...updates } : c));
+    update({ conditions: nextConditions });
+  };
+
+  const removeCondition = (index: number) => {
+    update({ conditions: safeRule.conditions.filter((_, i) => i !== index) });
+  };
+
+  const otherComponents = useMemo(() => {
+    return components.filter((c) => c.id !== currentComponentId);
+  }, [components, currentComponentId]);
+
+  return (
+    <div className="space-y-3">
+      <label className="flex items-center gap-2 text-sm text-secondary-700">
+        <input
+          type="checkbox"
+          checked={Boolean(rule)}
+          onChange={(e) => onChange(e.target.checked ? safeRule : undefined)}
+          className="border-builder-border"
+        />
+        Enable conditional visibility
+      </label>
+
+      {rule && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-secondary-700">Action</label>
+            <select
+              value={safeRule.action}
+              onChange={(e) => update({ action: e.target.value as VisibilityRule['action'] })}
+              className="px-2 py-1 border border-builder-border rounded text-sm"
+            >
+              <option value="show">Show</option>
+              <option value="hide">Hide</option>
+            </select>
+
+            <label className="text-sm font-medium text-secondary-700 ml-2">When</label>
+            <select
+              value={safeRule.match}
+              onChange={(e) => update({ match: e.target.value as VisibilityRule['match'] })}
+              className="px-2 py-1 border border-builder-border rounded text-sm"
+            >
+              <option value="all">All conditions match</option>
+              <option value="any">Any condition matches</option>
+            </select>
+          </div>
+
+          {safeRule.conditions.length === 0 ? (
+            <p className="text-sm text-secondary-500">Add one or more conditions.</p>
+          ) : (
+            <div className="space-y-2">
+              {safeRule.conditions.map((condition, index) => {
+                const needsValue =
+                  condition.operator !== 'is_empty' &&
+                  condition.operator !== 'is_not_empty' &&
+                  condition.operator !== 'is_checked' &&
+                  condition.operator !== 'is_unchecked';
+
+                return (
+                  <div key={index} className="rounded border border-builder-border bg-white p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={condition.sourceComponentId}
+                        onChange={(e) => updateCondition(index, { sourceComponentId: e.target.value })}
+                        className="flex-1 px-2 py-1 border border-builder-border rounded text-sm"
+                      >
+                        <option value="">Select field</option>
+                        {otherComponents.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {getComponentLabel(c)}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={condition.operator}
+                        onChange={(e) =>
+                          updateCondition(index, { operator: e.target.value as VisibilityCondition['operator'] })
+                        }
+                        className="px-2 py-1 border border-builder-border rounded text-sm"
+                      >
+                        {(Object.keys(OPERATOR_LABELS) as LogicOperator[]).map((op) => (
+                          <option key={op} value={op}>
+                            {OPERATOR_LABELS[op]}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        className="p-1 rounded hover:bg-red-50 text-red-600"
+                        onClick={() => removeCondition(index)}
+                        aria-label="Remove condition"
+                      >
+                        <Icon type="delete" size="sm" />
+                      </button>
+                    </div>
+
+                    {needsValue && (
+                      <input
+                        type="text"
+                        value={condition.value === undefined ? '' : String(condition.value)}
+                        onChange={(e) => updateCondition(index, { value: e.target.value })}
+                        className="w-full px-3 py-2 border border-builder-border rounded text-sm"
+                        placeholder="Value"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              update({
+                conditions: [
+                  ...safeRule.conditions,
+                  { sourceComponentId: '', operator: 'equals', value: '' } satisfies VisibilityCondition,
+                ],
+              })
+            }
+            className="justify-center"
+          >
+            <Icon type="add" size="sm" className="mr-2" />
+            Add condition
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const PropertiesInspector: React.FC<{
   component: Component | null;
+  steps: FormStep[];
+  allComponents: Component[];
   onUpdate: (id: string, updates: Partial<Component>) => void;
   onDelete: (id: string) => void;
-}> = ({ component, onUpdate, onDelete }) => {
-  const labelRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (component) {
-      labelRef.current?.focus();
-    }
-  }, [component?.id]);
+}> = ({ component, steps, allComponents, onUpdate, onDelete }) => {
+  const registry = getFieldRegistry();
 
   if (!component) {
     return (
@@ -258,15 +566,22 @@ const PropertiesInspector: React.FC<{
     );
   }
 
-  const label = typeof component.props.label === 'string' ? component.props.label : '';
-  const name = typeof component.props.name === 'string' ? component.props.name : '';
-  const placeholder =
-    typeof component.props.placeholder === 'string' ? component.props.placeholder : '';
-  const required = Boolean(component.props.required);
+  const definition = registry.get(component.type as FieldType);
+  const config = component.props as FieldConfig;
+  const visibilityRule = (component.props as { visibilityRule?: VisibilityRule }).visibilityRule;
+
+  const configError = useMemo(() => {
+    if (!definition?.validateConfig) return null;
+    return definition.validateConfig(config);
+  }, [config, definition]);
+
+  const ConfigComponent = definition?.configComponent ?? FieldConfigPanel;
+
+  const validationRules = (config.validationRules || []) as ValidationRule[];
 
   return (
     <Panel title="Properties">
-      <div className="space-y-4">
+      <div className="space-y-5">
         <div>
           <label className="block text-sm font-medium text-secondary-700 mb-1">Type</label>
           <input
@@ -278,63 +593,46 @@ const PropertiesInspector: React.FC<{
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-secondary-700 mb-1">Label</label>
-          <input
-            ref={labelRef}
-            type="text"
-            value={label}
-            onChange={(e) =>
-              onUpdate(component.id, {
-                props: { label: e.target.value },
-              })
-            }
+          <label className="block text-sm font-medium text-secondary-700 mb-1">Step</label>
+          <select
+            value={component.stepId || steps[0]?.id}
+            onChange={(e) => onUpdate(component.id, { stepId: e.target.value })}
             className="w-full px-3 py-2 border border-builder-border rounded bg-white text-sm"
+          >
+            {steps.map((step) => (
+              <option key={step.id} value={step.id}>
+                {step.title}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <h3 className="text-sm font-semibold text-secondary-900 mb-2">Field configuration</h3>
+          <ConfigComponent
+            config={config}
+            onChange={(updates) => onUpdate(component.id, { props: updates })}
+            error={configError}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-secondary-700 mb-1">Name</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) =>
-              onUpdate(component.id, {
-                props: { name: e.target.value },
-              })
-            }
-            className="w-full px-3 py-2 border border-builder-border rounded bg-white text-sm"
+          <h3 className="text-sm font-semibold text-secondary-900 mb-2">Validation rules</h3>
+          <ValidationRulesEditor
+            rules={validationRules}
+            onChange={(rules) => onUpdate(component.id, { props: { validationRules: rules } })}
           />
         </div>
 
-        {(component.type === 'text' || component.type === 'textarea') && (
-          <div>
-            <label className="block text-sm font-medium text-secondary-700 mb-1">Placeholder</label>
-            <input
-              type="text"
-              value={placeholder}
-              onChange={(e) =>
-                onUpdate(component.id, {
-                  props: { placeholder: e.target.value },
-                })
-              }
-              className="w-full px-3 py-2 border border-builder-border rounded bg-white text-sm"
-            />
-          </div>
-        )}
-
-        <label className="flex items-center gap-2 text-sm text-secondary-700">
-          <input
-            type="checkbox"
-            checked={required}
-            onChange={(e) =>
-              onUpdate(component.id, {
-                props: { required: e.target.checked },
-              })
-            }
-            className="rounded border-builder-border"
+        <div>
+          <h3 className="text-sm font-semibold text-secondary-900 mb-2">Visibility rules</h3>
+          <VisibilityRuleEditor
+            rule={visibilityRule}
+            components={allComponents}
+            currentComponentId={component.id}
+            onChange={(next) => onUpdate(component.id, { props: { visibilityRule: next } })}
           />
-          Required
-        </label>
+        </div>
 
         <Button
           variant="danger"
@@ -354,15 +652,78 @@ export const BuilderView: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
-  const components = useAppSelector((state) => state.builder.schema.present);
+  const schema = useAppSelector((state) => state.builder.schema.present);
   const selectedComponentId = useAppSelector((state) => state.builder.selectedComponentId);
+  const selectedStepId = useAppSelector((state) => state.builder.selectedStepId);
   const canUndo = useAppSelector((state) => state.builder.schema.past.length > 0);
   const canRedo = useAppSelector((state) => state.builder.schema.future.length > 0);
 
+  const steps = useMemo(() => [...schema.steps].sort((a, b) => a.order - b.order), [schema.steps]);
+  const activeStepId = selectedStepId ?? steps[0]?.id ?? null;
+
+  const componentsForStep = useMemo(() => {
+    if (!activeStepId) return [];
+    return schema.components
+      .filter((c) => c.stepId === activeStepId)
+      .sort((a, b) => a.order - b.order);
+  }, [schema.components, activeStepId]);
+
   const selectedComponent = useMemo(() => {
     if (!selectedComponentId) return null;
-    return components.find((c) => c.id === selectedComponentId) ?? null;
-  }, [components, selectedComponentId]);
+    return schema.components.find((c) => c.id === selectedComponentId) ?? null;
+  }, [schema.components, selectedComponentId]);
+
+  const registry = getFieldRegistry();
+
+  const templates = useMemo<FieldTemplate[]>(() => {
+    const base = registry.getAll().map((def) => ({
+      id: def.type,
+      type: def.type,
+      title: def.title,
+      description: def.description,
+      defaultConfig: def.defaultConfig,
+    }));
+
+    const presets: FieldTemplate[] = [
+      {
+        id: 'text:email',
+        type: 'text',
+        title: 'Email',
+        description: 'Email address (preset)',
+        defaultConfig: {
+          label: 'Email',
+          name: 'email',
+          placeholder: 'name@example.com',
+          validationRules: [
+            {
+              type: 'pattern',
+              value: '[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}$',
+              message: 'Enter a valid email address',
+            },
+          ],
+        },
+      },
+      {
+        id: 'text:phone',
+        type: 'text',
+        title: 'Phone',
+        description: 'Phone number (preset)',
+        defaultConfig: {
+          label: 'Phone',
+          name: 'phone',
+          placeholder: '(555) 123-4567',
+        },
+      },
+    ];
+
+    return [...presets, ...base];
+  }, [registry]);
+
+  const templateById = useMemo(() => {
+    const map = new Map<string, FieldTemplate>();
+    for (const template of templates) map.set(template.id, template);
+    return map;
+  }, [templates]);
 
   const { sensors } = useDragAndDrop();
   const { save, load, clear, exportJson, importJson } = useSchemaPersistence();
@@ -370,7 +731,7 @@ export const BuilderView: React.FC = () => {
   const [activeDrag, setActiveDrag] = useState<ActiveDragData | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
-  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [isLeftOpen, setIsLeftOpen] = useState(false);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -413,14 +774,14 @@ export const BuilderView: React.FC = () => {
       setActiveDrag(null);
 
       const { active, over } = event;
-      if (!over) return;
+      if (!over || !activeStepId) return;
 
       const activeData = active.data.current as ActiveDragData | undefined;
 
       if (activeData?.kind === 'component') {
         let overId = String(over.id);
         if (overId === 'canvas') {
-          const lastId = components[components.length - 1]?.id;
+          const lastId = componentsForStep[componentsForStep.length - 1]?.id;
           if (!lastId || lastId === String(active.id)) return;
           overId = lastId;
         }
@@ -432,30 +793,45 @@ export const BuilderView: React.FC = () => {
       }
 
       if (activeData?.kind === 'template') {
-        const template = FIELD_TEMPLATES.find((t) => t.type === activeData.templateType);
+        const template = templateById.get(activeData.templateId);
         if (!template) return;
 
         const id = generateId();
-        const baseName = String(template.defaultProps.name ?? template.type);
+        const baseName = template.defaultConfig.name ?? template.type;
+
+        const definition = registry.get(template.type);
+        const baseConfig = (definition?.defaultConfig ?? {}) as Partial<FieldConfig>;
+
+        const config: FieldConfig = {
+          ...(baseConfig as FieldConfig),
+          ...(template.defaultConfig as FieldConfig),
+          label: String(template.defaultConfig.label ?? baseConfig.label ?? template.title),
+          name: `${String(baseName)}_${id.slice(-4)}`,
+        };
+
         const nextComponent: Component = {
           id,
           type: template.type,
-          props: {
-            ...template.defaultProps,
-            name: `${baseName}_${id.slice(-4)}`,
-          },
-          order: components.length,
+          props: config as unknown as Record<string, unknown>,
+          order: componentsForStep.length,
+          stepId: activeStepId,
         };
 
         const overId = String(over.id);
-        const overIndex = components.findIndex((c) => c.id === overId);
-        const insertIndex = overId === 'canvas' || overIndex === -1 ? components.length : overIndex;
+        const overIndex = componentsForStep.findIndex((c) => c.id === overId);
+        const insertIndex = overId === 'canvas' || overIndex === -1 ? componentsForStep.length : overIndex;
 
         dispatch(addComponent({ component: nextComponent, index: insertIndex }));
         dispatch(selectComponent(nextComponent.id));
       }
     },
-    [components, dispatch]
+    [
+      activeStepId,
+      componentsForStep,
+      dispatch,
+      registry,
+      templateById,
+    ]
   );
 
   useEffect(() => {
@@ -491,18 +867,37 @@ export const BuilderView: React.FC = () => {
   }, [dispatch, selectedComponentId]);
 
   const palettePanel = (
-    <Panel title="Field palette">
-      <ul role="listbox" aria-label="Field templates" className="space-y-2">
-        {FIELD_TEMPLATES.map((template) => (
-          <TemplateDraggable key={template.type} template={template} />
-        ))}
-      </ul>
-    </Panel>
+    <div className="space-y-4">
+      <StepsPanel
+        steps={steps}
+        selectedStepId={activeStepId}
+        onSelectStep={(id) => {
+          dispatch(selectStep(id));
+          dispatch(selectComponent(null));
+        }}
+        onAddStep={() => {
+          const nextId = `step_${generateId().slice(-4)}`;
+          dispatch(addStep({ step: { id: nextId, title: `Step ${steps.length + 1}`, order: steps.length } }));
+        }}
+        onRenameStep={(id, title) => dispatch(updateStep({ id, updates: { title } }))}
+        onDeleteStep={(id) => dispatch(removeStep(id))}
+      />
+
+      <Panel title="Field palette">
+        <ul role="listbox" aria-label="Field templates" className="space-y-2">
+          {templates.map((template) => (
+            <TemplateDraggable key={template.id} template={template} />
+          ))}
+        </ul>
+      </Panel>
+    </div>
   );
 
   const inspectorPanel = (
     <PropertiesInspector
       component={selectedComponent}
+      steps={steps}
+      allComponents={schema.components}
       onUpdate={handleUpdate}
       onDelete={handleDelete}
     />
@@ -511,12 +906,12 @@ export const BuilderView: React.FC = () => {
   const dragOverlayLabel = useMemo(() => {
     if (!activeDrag) return null;
     if (activeDrag.kind === 'template') {
-      return FIELD_TEMPLATES.find((t) => t.type === activeDrag.templateType)?.title ?? 'Field';
+      return templateById.get(activeDrag.templateId)?.title ?? 'Field';
     }
 
-    const component = components.find((c) => c.id === activeDrag.componentId);
+    const component = schema.components.find((c) => c.id === activeDrag.componentId);
     return component ? getComponentLabel(component) : 'Field';
-  }, [activeDrag, components]);
+  }, [activeDrag, schema.components, templateById]);
 
   return (
     <div className="h-screen bg-builder-canvas flex flex-col">
@@ -531,13 +926,8 @@ export const BuilderView: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="md:hidden"
-            onClick={() => setIsPaletteOpen(true)}
-          >
-            Fields
+          <Button variant="outline" size="sm" className="md:hidden" onClick={() => setIsLeftOpen(true)}>
+            Steps & Fields
           </Button>
           <Button
             variant="outline"
@@ -621,19 +1011,16 @@ export const BuilderView: React.FC = () => {
           setActiveDrag(null);
         }}
       >
-        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[16rem_1fr] lg:grid-cols-[16rem_1fr_20rem]">
+        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[18rem_1fr] lg:grid-cols-[18rem_1fr_22rem]">
           <aside className="hidden md:block border-r border-builder-border bg-builder-panel p-4 overflow-y-auto">
             {palettePanel}
           </aside>
 
           <main className="min-w-0 p-4 md:p-6 overflow-auto">
             <div className="max-w-5xl mx-auto">
-              <SortableContext
-                items={components.map((c) => c.id)}
-                strategy={verticalListSortingStrategy}
-              >
+              <SortableContext items={componentsForStep.map((c) => c.id)} strategy={verticalListSortingStrategy}>
                 <Canvas
-                  components={components}
+                  components={componentsForStep}
                   selectedComponentId={selectedComponentId}
                   onSelect={handleSelect}
                   onDelete={handleDelete}
@@ -656,7 +1043,7 @@ export const BuilderView: React.FC = () => {
         </DragOverlay>
       </DndContext>
 
-      <Modal isOpen={isPaletteOpen} onClose={() => setIsPaletteOpen(false)} title="Field palette">
+      <Modal isOpen={isLeftOpen} onClose={() => setIsLeftOpen(false)} title="Steps & field palette">
         {palettePanel}
       </Modal>
 
@@ -731,7 +1118,7 @@ export const BuilderView: React.FC = () => {
               setImportError(null);
             }}
             aria-label="Schema JSON to import"
-            placeholder='{"version":1,"components":[]}'
+            placeholder='{"version":2,"steps":[],"components":[]}'
           />
           {importError && <p className="text-sm text-red-600">{importError}</p>}
         </div>

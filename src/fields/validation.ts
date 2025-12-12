@@ -10,6 +10,23 @@ export class FieldValidator {
     if (value === '' || value === null || value === undefined) {
       return { valid: false, errors: ['This field is required'] };
     }
+
+    if (typeof value === 'boolean') {
+      return value ? { valid: true, errors: [] } : { valid: false, errors: ['This field is required'] };
+    }
+
+    if (Array.isArray(value)) {
+      return value.length > 0
+        ? { valid: true, errors: [] }
+        : { valid: false, errors: ['This field is required'] };
+    }
+
+    if (typeof FileList !== 'undefined' && value instanceof FileList) {
+      return value.length > 0
+        ? { valid: true, errors: [] }
+        : { valid: false, errors: ['This field is required'] };
+    }
+
     return { valid: true, errors: [] };
   }
 

@@ -1,10 +1,18 @@
-import type { RadioFieldConfig, FieldConfig, FieldDefinition } from '../types/fields';
+import type { RadioFieldConfig, FieldConfig, FieldDefinition, FieldRenderProps } from '../types/fields';
+import { RadioFieldConfigPanel } from './config/RadioFieldConfig';
 
-const RadioFieldRender: React.FC<{ config: FieldConfig; mode: 'builder' | 'preview' }> = ({
+const RadioFieldRender: React.FC<FieldRenderProps> = ({
   config: rawConfig,
   mode,
+  value,
+  onChange,
+  error,
 }) => {
   const config = rawConfig as RadioFieldConfig;
+
+  const isControlled = typeof onChange === 'function';
+  const currentValue = value ?? config.defaultValue;
+
   if (mode === 'builder') {
     return (
       <div className="space-y-2">
@@ -13,7 +21,7 @@ const RadioFieldRender: React.FC<{ config: FieldConfig; mode: 'builder' | 'previ
         <div className="space-y-1">
           {config.options.slice(0, 2).map((option) => (
             <div key={option.value} className="flex items-center gap-2">
-              <input type="radio" disabled className={`border-builder-border`} />
+              <input type="radio" disabled className="border-builder-border" />
               <label className="text-sm text-secondary-700">{option.label}</label>
             </div>
           ))}
@@ -30,27 +38,33 @@ const RadioFieldRender: React.FC<{ config: FieldConfig; mode: 'builder' | 'previ
       </label>
       {config.helperText && <p className="text-xs text-secondary-600">{config.helperText}</p>}
       <div className="space-y-1">
-        {config.options.map((option) => (
-          <div key={option.value} className="flex items-center gap-2">
-            <input
-              id={`${config.name}_${option.value}`}
-              name={config.name}
-              type="radio"
-              value={option.value}
-              required={config.required}
-              disabled={config.disabled}
-              defaultChecked={config.defaultValue === option.value}
-              className={`border-builder-border ${config.className || ''}`}
-            />
-            <label
-              htmlFor={`${config.name}_${option.value}`}
-              className="text-sm text-secondary-900"
-            >
-              {option.label}
-            </label>
-          </div>
-        ))}
+        {config.options.map((option) => {
+          const id = `${config.name}_${option.value}`;
+          return (
+            <div key={option.value} className="flex items-center gap-2">
+              <input
+                id={id}
+                name={config.name}
+                type="radio"
+                value={option.value}
+                required={config.required}
+                disabled={config.disabled}
+                {...(isControlled
+                  ? {
+                      checked: String(currentValue ?? '') === String(option.value),
+                      onChange: () => onChange(option.value),
+                    }
+                  : { defaultChecked: config.defaultValue === option.value })}
+                className={`border-builder-border ${config.className || ''}`}
+              />
+              <label htmlFor={id} className="text-sm text-secondary-900">
+                {option.label}
+              </label>
+            </div>
+          );
+        })}
       </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 };
@@ -74,6 +88,13 @@ export const radioFieldDefinition: FieldDefinition = {
     required: false,
     options: [],
   },
+  configComponent: ({ config, onChange, error }) => (
+    <RadioFieldConfigPanel
+      config={config as RadioFieldConfig}
+      onChange={(updates) => onChange(updates as Partial<FieldConfig>)}
+      error={error}
+    />
+  ),
   renderComponent: RadioFieldRender,
   validateConfig: validateRadioConfig,
 };

@@ -1,10 +1,23 @@
-import type { SliderFieldConfig, FieldConfig, FieldDefinition } from '../types/fields';
+import type { SliderFieldConfig, FieldConfig, FieldDefinition, FieldRenderProps } from '../types/fields';
+import { SliderFieldConfigPanel } from './config/SliderFieldConfig';
 
-const SliderFieldRender: React.FC<{ config: FieldConfig; mode: 'builder' | 'preview' }> = ({
+const SliderFieldRender: React.FC<FieldRenderProps> = ({
   config: rawConfig,
   mode,
+  value,
+  onChange,
+  error,
 }) => {
   const config = rawConfig as SliderFieldConfig;
+
+  const isControlled = typeof onChange === 'function';
+  const currentValue =
+    typeof value === 'number'
+      ? value
+      : typeof config.defaultValue === 'number'
+        ? (config.defaultValue as number)
+        : config.min;
+
   if (mode === 'builder') {
     return (
       <div className="space-y-1">
@@ -24,7 +37,7 @@ const SliderFieldRender: React.FC<{ config: FieldConfig; mode: 'builder' | 'prev
 
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-secondary-900">
+      <label className="block text-sm font-medium text-secondary-900" htmlFor={config.name}>
         {config.label}
         {config.required && <span className="text-red-600"> *</span>}
       </label>
@@ -39,17 +52,18 @@ const SliderFieldRender: React.FC<{ config: FieldConfig; mode: 'builder' | 'prev
           min={config.min}
           max={config.max}
           step={config.step}
-          defaultValue={config.defaultValue as number}
+          {...(isControlled
+            ? { value: currentValue, onChange: (e) => onChange(Number(e.target.value)) }
+            : { defaultValue: config.defaultValue as number | undefined })}
           className={`w-full ${config.className || ''}`}
         />
         <div className="flex justify-between text-xs text-secondary-600">
           <span>{config.min}</span>
-          <span className="font-medium text-secondary-900">
-            {(config.defaultValue as number | undefined) || config.min}
-          </span>
+          <span className="font-medium text-secondary-900">{currentValue}</span>
           <span>{config.max}</span>
         </div>
       </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 };
@@ -79,6 +93,9 @@ export const sliderFieldDefinition: FieldDefinition = {
     max: 100,
     step: 1,
   },
+  configComponent: ({ config, onChange, error }) => (
+    <SliderFieldConfigPanel config={config as SliderFieldConfig} onChange={onChange} error={error} />
+  ),
   renderComponent: SliderFieldRender,
   validateConfig: validateSliderConfig,
 };
