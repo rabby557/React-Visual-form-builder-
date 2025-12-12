@@ -1,0 +1,55 @@
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Node modules (if using npm)
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# WordPress and PHP
+wp-content/
+wp-admin/
+wp-includes/
+wp-*.php
+*.log
+.htaccess
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Build artifacts (keep dist for deployment, but ignore source maps)
+assets/dist/*.map
+
+# Cache files
+cache/
+.cache/
+
+# Backup files
+*.backup
+*.sql
+*.dump
+
+# Dependencies (if any Python or other language)
+venv/
+__pycache__/
+*.pyc
+
+# OS specific
+.DS_Store
+Thumbs.db
+.directory
