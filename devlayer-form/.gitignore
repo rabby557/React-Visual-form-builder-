@@ -1,0 +1,31 @@
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Node modules (if applicable)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Composer
+vendor/
+composer.lock
+
+# Build files
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Log files
+*.log
+
+# OS files
+Thumbs.db
